@@ -52,16 +52,32 @@ def get_pls_results(lv_path, boot_ratio_path, method='fdr_bh', p=.05):
 
 
 # get the results
-group_results = get_pls_results('./Data/lv_vals.mat', './Data/bsrs.mat')
+group_results = get_pls_results('./Data/PLS_Results/lv_vals.mat', './Data/bsrs.mat')
 
-pls = pd.read_csv('./Data/PLS_Results/PLS_results.csv')
+# pls from R
+pls_result_path = './Data/PLS_Results/PLS_results_hsCRP.csv'
+pls = pd.read_csv(pls_result_path)
 
-# Plot using Seaborn with error bars
-# customize x labels
+# plotting
 x_labels = ['Control', 'Psychiatric']
 plt.figure()
 sns.barplot(x='Group', y='Comp2', data=pls, estimator='mean', errorbar='se')
+plt.ylabel('Group Score')
 plt.xticks(ticks=[0, 1], labels=x_labels)
-plt.title('PLS Component 2 with Error Bars')
+plt.title('PLS Significant Latent Variable')
+sns.despine()
 plt.show()
 
+# plot the line graph
+plt.figure()
+sns.lineplot(x='Ferritin_ngperml', y='Comp2', data=pls)
+plt.ylabel('Group Score')
+plt.title('PLS Significant Latent Variable')
+sns.despine()
+plt.show()
+
+# correlation
+from scipy.stats import pearsonr
+
+# get the correlation
+pearsonr(pls['Ferritin_ngperml'], pls['Comp2'])
