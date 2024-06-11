@@ -39,8 +39,7 @@ def get_pls_results(lv_path, boot_ratio_path, method='fdr_bh', p=.05):
     # extract the variable names from the original data
     var_names = data.columns.tolist()
 
-    names_to_be_removed = ['Group', 'Code', 'RAVLT_ListA_Delay_Recall_Time1', 'RAVLT_ListA_Delay_Recall_Time2',
-                           'RAVLT_ListA_RecallDelay_Trial2']
+    names_to_be_removed = ['Group', 'Code', 'RAVLT_ListA_Delay_Recall_Time1', 'RAVLT_ListA_Delay_Recall_Time2']
 
     # remove the unnecessary columns
     var_names = [name for name in var_names if name not in names_to_be_removed]
@@ -52,32 +51,29 @@ def get_pls_results(lv_path, boot_ratio_path, method='fdr_bh', p=.05):
 
 
 # get the results
-group_results = get_pls_results('./Data/PLS_Results/lv_vals.mat', './Data/bsrs.mat')
+group_results = get_pls_results('./Data/PLS_Results/PLS_outputTaskPLSGroupBased_lv_vals.mat',
+                                './Data/PLS_Results/PLS_outputTaskPLSGroupBased.mat')
 
-# pls from R
-pls_result_path = './Data/PLS_Results/PLS_results_hsCRP.csv'
-pls = pd.read_csv(pls_result_path)
 
-# plotting
-x_labels = ['Control', 'Psychiatric']
-plt.figure()
-sns.barplot(x='Group', y='Comp2', data=pls, estimator='mean', errorbar='se')
-plt.ylabel('Group Score')
-plt.xticks(ticks=[0, 1], labels=x_labels)
-plt.title('PLS Significant Latent Variable')
-sns.despine()
-plt.show()
+# # pls from R
+# pls_result_path = './Data/PLS_Results/PLS_results_hsCRP.csv'
+# pls = pd.read_csv(pls_result_path)
+#
+# # plotting
+# x_labels = ['Control', 'Psychiatric']
+# plt.figure()
+# sns.barplot(x='Group', y='Comp2', data=pls, estimator='mean', errorbar='se')
+# plt.ylabel('Group Score')
+# plt.xticks(ticks=[0, 1], labels=x_labels)
+# plt.title('PLS Significant Latent Variable')
+# sns.despine()
+# plt.show()
+#
+# # plot the line graph
+# plt.figure()
+# sns.lineplot(x='Ferritin_ngperml', y='Comp2', data=pls)
+# plt.ylabel('Group Score')
+# plt.title('PLS Significant Latent Variable')
+# sns.despine()
+# plt.show()
 
-# plot the line graph
-plt.figure()
-sns.lineplot(x='Ferritin_ngperml', y='Comp2', data=pls)
-plt.ylabel('Group Score')
-plt.title('PLS Significant Latent Variable')
-sns.despine()
-plt.show()
-
-# correlation
-from scipy.stats import pearsonr
-
-# get the correlation
-pearsonr(pls['Ferritin_ngperml'], pls['Comp2'])
