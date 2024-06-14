@@ -3,16 +3,19 @@ import pandas as pd
 import ast
 import json
 import openpyxl
+from var_def import (iron, neuro_all, neuro_mean, neuro_median, neuro_combined, behavior, psychopathology,
+                     psychopathology_sub)
 
 # read xlsx file
-OSPAN = pd.read_csv('./Data/OSPAN_data_5.7.24.csv', header=1)
-data = pd.read_excel('./Data/CC_request_DrWorthy_05302024.xlsx')
-workbook = openpyxl.load_workbook('./Data/CC_request_DrWorthy_DICTIONARY_05302024.xlsx')
+OSPAN = pd.read_csv('./Data/Original_Data/OSPAN_data_5.7.24.csv', header=1)
+data = pd.read_excel('./Data/Original_Data/CC_request_DrWorthy_05302024.xlsx')
+# workbook = openpyxl.load_workbook('./Data/Original_Data/CC_request_DrWorthy_DICTIONARY_05302024.xlsx')
+workbook = openpyxl.load_workbook('./Data/Original_Data/CC_request_DrWorthy_DICTIONARY_05302024 - Copy.xlsx')
 sheet = workbook.active
 
 SGT = []
 
-with open('./Data/jatos_results_Pulled_4_10_24.txt', 'r') as file:
+with open('./Data/Original_Data/jatos_results_Pulled_4_10_24.txt', 'r') as file:
     for line in file:
         json_data = json.loads(line)
         SGT.append(json_data)
@@ -45,6 +48,7 @@ data = data.dropna()
 
 # # print ethnicity range
 # print(data['Race'].unique())
+columns = list(data.columns)
 print(data.columns)
 
 # =============================================================================
@@ -100,31 +104,98 @@ for col in data.columns:
 # print the missing variables
 print(f'Missing variables: {missing_vars}')
 
-# save cleaned data
-data.to_csv('./Data/cleaned_data.csv', index=False)
+# # save cleaned data
+# data.to_csv('./Data/cleaned_data.csv', index=False)
 
 # =============================================================================
 # the following code is to prepare data for MATLAB PLS implementation (not necessary unless needed)
 # =============================================================================
-# # separate by group
-# psych_pls = data[data['Group'] == 'Psychiatric']
-# control_pls = data[data['Group'] == 'Control']
-#
-# # remove the ID and Group columns
-# psych_pls = psych_pls.drop(columns=['Code', 'Group'])
-# control_pls = control_pls.drop(columns=['Code', 'Group'])
-#
-# # save
-# psych_pls.to_csv('./Data/psych_pls.csv', index=False)
-# control_pls.to_csv('./Data/control_pls.csv', index=False)
+# separate by group
+psych_pls = data[data['Group'] == 'Psychiatric']
+control_pls = data[data['Group'] == 'Control']
 
-# behavioral pls
-iron = data['Ferritin_ngperml']
-behavioral = data[['CPT_OMI_T', 'CPT_COM_T']]
+# remove the ID and Group columns
+psych_pls = psych_pls.drop(columns=['Code', 'Group', 'tilt_nod', 'tilt_y', 'tilt_z'])
+control_pls = control_pls.drop(columns=['Code', 'Group', 'tilt_nod', 'tilt_y', 'tilt_z'])
+
+# separate the neuroimaging data
+psych_without_neuro = psych_pls.drop(columns=neuro_all)
+control_without_neuro = control_pls.drop(columns=neuro_all)
+
+psych_behav = psych_pls[behavior]
+control_behav = control_pls[behavior]
+
+psych_mean = psych_pls[neuro_mean]
+control_mean = control_pls[neuro_mean]
+
+psych_median = psych_pls[neuro_median]
+control_median = control_pls[neuro_median]
+
+psych_combined = psych_pls[neuro_combined]
+control_combined = control_pls[neuro_combined]
+
+psych_with_mean = pd.concat([psych_without_neuro, psych_mean], axis=1)
+control_with_mean = pd.concat([control_without_neuro, control_mean], axis=1)
+
+psych_with_median = pd.concat([psych_without_neuro, psych_median], axis=1)
+control_with_median = pd.concat([control_without_neuro, control_median], axis=1)
+
+psych_with_combined = pd.concat([psych_without_neuro, psych_combined], axis=1)
+control_with_combined = pd.concat([control_without_neuro, control_combined], axis=1)
+
+# # save
+# psych_without_neuro.to_csv('./Data/PLS_Data/psych_without_neuro.csv', index=False)
+# control_without_neuro.to_csv('./Data/PLS_Data/control_without_neuro.csv', index=False)
+#
+# psych_behav.to_csv('./Data/PLS_Data/psych_behav.csv', index=False)
+# control_behav.to_csv('./Data/PLS_Data/control_behav.csv', index=False)
+#
+# psych_mean.to_csv('./Data/PLS_Data/psych_mean.csv', index=False)
+# control_mean.to_csv('./Data/PLS_Data/control_mean.csv', index=False)
+#
+# psych_median.to_csv('./Data/PLS_Data/psych_median.csv', index=False)
+# control_median.to_csv('./Data/PLS_Data/control_median.csv', index=False)
+#
+# psych_combined.to_csv('./Data/PLS_Data/psych_combined.csv', index=False)
+# control_combined.to_csv('./Data/PLS_Data/control_combined.csv', index=False)
+#
+# psych_with_mean.to_csv('./Data/PLS_Data/psych_with_mean.csv', index=False)
+# control_with_mean.to_csv('./Data/PLS_Data/control_with_mean.csv', index=False)
+#
+# psych_with_median.to_csv('./Data/PLS_Data/psych_with_median.csv', index=False)
+# control_with_median.to_csv('./Data/PLS_Data/control_with_median.csv', index=False)
+#
+# psych_with_combined.to_csv('./Data/PLS_Data/psych_with_combined.csv', index=False)
+# control_with_combined.to_csv('./Data/PLS_Data/control_with_combined.csv', index=False)
+
+# -----------------------------------------------------------------------------
+# prepare for behavioral PLS
+# -----------------------------------------------------------------------------
+# separate behavioral data
+# psychopathology = data[psychopathology]
+psychopathology = data[psychopathology_sub]
+behavioral = data[behavior]
+neuro_mean_df = data[neuro_mean]
+neuro_combined_df = data[neuro_combined]
+iron = data[iron]
+
+# check if the column values are all the same for the behavioral data
+uniform_vars = []
+for col in behavioral.columns:
+    if len(behavioral[col].unique()) == 1:
+        # drop the column and print the column name
+        behavioral = behavioral.drop(columns=[col])
+        uniform_vars.append(col)
+        print(f'{col} dropped')
+
+print(f'Uniform variables: {uniform_vars}')
 
 # save
-iron.to_csv('./Data/iron.csv', index=False)
-behavioral.to_csv('./Data/behavioral.csv', index=False)
+# psychopathology.to_csv('./Data/PLS_Data/psychopathology.csv', index=False)
+# behavioral.to_csv('./Data/PLS_Data/behavioral.csv', index=False)
+# neuro_mean_df.to_csv('./Data/PLS_Data/neuro_mean.csv', index=False)
+# neuro_combined_df.to_csv('./Data/PLS_Data/neuro_combined.csv', index=False)
+iron.to_csv('./Data/PLS_Data/iron.csv', index=False)
 
 # =============================================================================
 #              SGT Data Cleaning (not necessary unless needed)
@@ -140,5 +211,4 @@ behavioral.to_csv('./Data/behavioral.csv', index=False)
 # # explode data
 # SGT = SGT.explode(['React', 'Reward', 'keyResponse', 'Bank'])
 
-
-
+print('Preprocessing done!')
