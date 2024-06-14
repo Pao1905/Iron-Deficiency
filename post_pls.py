@@ -5,12 +5,16 @@ from scipy.stats import norm
 from statsmodels.stats.multitest import multipletests
 import matplotlib.pyplot as plt
 import seaborn as sns
+from scipy.stats import pearsonr
+from preprocessing import psych_without_neuro, psychopathology, neuro_mean_df
 
 # read original data
 data = pd.read_csv('./Data/cleaned_data.csv')
 
+print(pearsonr(data['Ferritin_ngperml'], data['Hemoccue_Hb']))
 
-def get_pls_results(lv_path, boot_ratio_path, method='fdr_bh', p=.05):
+
+def get_pls_results(lv_path, boot_ratio_path, original_df, method='fdr_bh', p=.05):
 
     # read lv_vals file
     lv_vals = sio.loadmat(lv_path)
@@ -37,12 +41,7 @@ def get_pls_results(lv_path, boot_ratio_path, method='fdr_bh', p=.05):
     df['significant'] = abs(df['p_value_adjusted']) < p
 
     # extract the variable names from the original data
-    var_names = data.columns.tolist()
-
-    names_to_be_removed = ['Group', 'Code', 'RAVLT_ListA_Delay_Recall_Time1', 'RAVLT_ListA_Delay_Recall_Time2']
-
-    # remove the unnecessary columns
-    var_names = [name for name in var_names if name not in names_to_be_removed]
+    var_names = original_df.columns.tolist()
 
     # add the variable names to the DataFrame as the first column
     df.insert(0, 'Variable', var_names)
@@ -51,9 +50,15 @@ def get_pls_results(lv_path, boot_ratio_path, method='fdr_bh', p=.05):
 
 
 # get the results
-group_results = get_pls_results('./Data/PLS_Results/PLS_outputTaskPLSGroupBased_lv_vals.mat',
-                                './Data/PLS_Results/PLS_outputTaskPLSGroupBased.mat')
-
+group_results = get_pls_results('./Data/PLS_Results/PLS_outputTaskPLSGroupBased_without_neuro_lv_vals.mat',
+                                './Data/PLS_Results/PLS_outputTaskPLSGroupBased_without_neuro.mat',
+                                psych_without_neuro)
+behavioral_psycho_results = get_pls_results('./Data/PLS_Results/PLS_outputpsychopathology~behav_lv_vals.mat',
+                                     './Data/PLS_Results/PLS_outputpsychopathology~behav.mat',
+                                     psychopathology)
+neuro_psycho_results = get_pls_results('./Data/PLS_Results/PLS_outputpsychopathology~neuro_lv_vals.mat',
+                                     './Data/PLS_Results/PLS_outputpsychopathology~neuro.mat',
+                                     neuro_mean_df)
 
 # # pls from R
 # pls_result_path = './Data/PLS_Results/PLS_results_hsCRP.csv'
