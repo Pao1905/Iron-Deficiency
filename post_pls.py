@@ -1,3 +1,5 @@
+import sys
+import os
 import scipy.io as sio
 import numpy as np
 import pandas as pd
@@ -6,15 +8,27 @@ from statsmodels.stats.multitest import multipletests
 import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import pearsonr
-from preprocessing import psych_without_neuro, psychopathology, neuro_mean_df
+from preprocessing import psych_without_neuro, psychopathology, neuro_mean_df, iron, variables_of_interest
+from efa import transformed_data
+
+# add path to the PLS results
+result_dir = os.path.abspath('C:/Users/zuire/OneDrive/桌面/胡勉之/Texas A&M University/IronDeficiency/MATLAB/Result')
+sys.path.append(result_dir)
 
 # read original data
 data = pd.read_csv('./Data/cleaned_data.csv')
 
 print(pearsonr(data['Ferritin_ngperml'], data['Hemoccue_Hb']))
+print(pearsonr(data['PARS_AnxSymptCt'], data['l_Pu_mean']))
+mean_brain = neuro_mean_df.mean(axis=1)
+print(pearsonr(data['PARS_AnxSymptCt'], mean_brain))
 
 
 def get_pls_results(lv_path, boot_ratio_path, original_df, method='fdr_bh', p=.05):
+
+    # define the path
+    lv_path = os.path.join(result_dir, lv_path)
+    boot_ratio_path = os.path.join(result_dir, boot_ratio_path)
 
     # read lv_vals file
     lv_vals = sio.loadmat(lv_path)
@@ -50,15 +64,27 @@ def get_pls_results(lv_path, boot_ratio_path, original_df, method='fdr_bh', p=.0
 
 
 # get the results
-group_results = get_pls_results('./Data/PLS_Results/PLS_outputTaskPLSGroupBased_without_neuro_lv_vals.mat',
-                                './Data/PLS_Results/PLS_outputTaskPLSGroupBased_without_neuro.mat',
-                                psych_without_neuro)
-behavioral_psycho_results = get_pls_results('./Data/PLS_Results/PLS_outputpsychopathology~behav_lv_vals.mat',
-                                     './Data/PLS_Results/PLS_outputpsychopathology~behav.mat',
-                                     psychopathology)
-neuro_psycho_results = get_pls_results('./Data/PLS_Results/PLS_outputpsychopathology~neuro_lv_vals.mat',
-                                     './Data/PLS_Results/PLS_outputpsychopathology~neuro.mat',
-                                     neuro_mean_df)
+# group_results = get_pls_results('./Data/PLS_Results/PLS_outputTaskPLSGroupBased_without_neuro_lv_vals.mat',
+#                                 './Data/PLS_Results/PLS_outputTaskPLSGroupBased_without_neuro.mat',
+#                                 psych_without_neuro)
+neuro_iron_results = get_pls_results('PLS_Behav_neuro~iron_lv_vals.mat',
+                                     'PLS_Behav_neuro~iron.mat',
+                                     iron)
+psychopathology_iron_results = get_pls_results('PLS_Behav_psychopathology~iron_lv_vals.mat',
+                                               'PLS_Behav_psychopathology~iron.mat',
+                                               iron)
+cognition_iron_results = get_pls_results('PLS_Behav_cognition~iron_lv_vals.mat',
+                                         'PLS_Behav_cognition~iron.mat',
+                                         iron)
+psychopathology_neuro_results = get_pls_results('PLS_Behav_psychopathology~neuro_lv_vals.mat',
+                                                 'PLS_Behav_psychopathology~neuro.mat',
+                                                 neuro_mean_df)
+cognition_neuro_results = get_pls_results('PLS_Behav_cognition~neuro_lv_vals.mat',
+                                          'PLS_Behav_cognition~neuro.mat',
+                                          neuro_mean_df)
+cognition_psychopathology_results = get_pls_results('PLS_Behav_cognition~psychopathology_lv_vals.mat',
+                                                        'PLS_Behav_cognition~psychopathology.mat',
+                                                        psychopathology)
 
 # # pls from R
 # pls_result_path = './Data/PLS_Results/PLS_results_hsCRP.csv'

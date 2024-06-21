@@ -52,4 +52,4 @@ loadings = pd.DataFrame(loadings, index=var)
 # transform the data
 transformed_data = fa.transform(data)
 transformed_data = pd.DataFrame(transformed_data, columns=['Familial-Social', 'Depressive', 'Anxiety', 'Conduct'])
-transformed_data.to_csv('./Data/PLS_Data/psychopathology_factors.csv', index=False)
+# transformed_data.to_csv('./Data/PLS_Data/psychopathology_factors.csv', index=False)
