@@ -3,6 +3,7 @@ import pandas as pd
 import ast
 import json
 import openpyxl
+from sklearn.preprocessing import StandardScaler
 from var_def import (iron, neuro_all, neuro_mean, neuro_median, neuro_combined, behavior, psychopathology)
 
 # read xlsx file
@@ -11,6 +12,9 @@ data = pd.read_excel('./Data/Original_Data/CC_request_DrWorthy_05302024.xlsx')
 # workbook = openpyxl.load_workbook('./Data/Original_Data/CC_request_DrWorthy_DICTIONARY_05302024.xlsx')
 workbook = openpyxl.load_workbook('./Data/Original_Data/CC_request_DrWorthy_DICTIONARY_05302024 - Copy.xlsx')
 sheet = workbook.active
+questionnaires = pd.read_excel('./Data/Original_Data/A&M_dataset.xlsx')
+questionnaires_dict = pd.read_excel('./Data/Original_Data/A&M_dataset_DICTIONARY.xlsx', sheet_name='Dataset_Dictionary')
+questionnaires_totals = pd.read_excel('./Data/Original_Data/A&M_dataset_DICTIONARY.xlsx', sheet_name='Scores')
 
 SGT = []
 
@@ -21,12 +25,17 @@ with open('./Data/Original_Data/jatos_results_Pulled_4_10_24.txt', 'r') as file:
 
 SGT = pd.DataFrame(SGT)
 
+CBCL = True
+
 # =============================================================================
 #                               Data Cleaning
 # =============================================================================
 # main data
 # filter out excluded participants
 data = data[data['Group'] != "Excluded"]
+
+# also exlude the participants with high hsCRP
+data = data[data['High_hsCRP'] != 1]
 
 # remove columns with too many missing values
 missing = data.isna().sum().sort_values(ascending=False)
@@ -42,7 +51,7 @@ data = data.drop(columns=drop_cols)
 data = data.replace(-999.0, np.nan)
 data = data.replace(-9999.0, np.nan)
 
-# drop rows with missing values
+# # drop rows with missing values
 data = data.dropna()
 
 # =============================================================================
@@ -117,7 +126,7 @@ for col in reverse_cols:
 print(f'Missing variables: {missing_vars}')
 
 # =============================================================================
-# the following code is to prepare data for MATLAB PLS implementation (not necessary unless needed)
+# the following code is to prepare data for MATLAB PLS implementation
 # =============================================================================
 # separate by group
 psych_pls = data[data['Group'] == 'Psychiatric']
@@ -172,6 +181,163 @@ for col in behavioral.columns:
         print(f'{col} dropped')
 
 print(f'Uniform variables: {uniform_vars}')
+print('=' * 50)
+
+# =============================================================================
+# With additional questionnaires data, we prepare for the bifactor model
+# =============================================================================
+
+print('Preparing for bifactor model...')
+
+# only select participants that are in the data
+questionnaires = questionnaires[questionnaires['Code'].isin(data['Code'])]
+
+if CBCL:
+    # select only the CBCL columns
+    cbcl_cols = questionnaires.columns[questionnaires.columns.str.contains('Q')]
+    questionnaires = questionnaires[cbcl_cols]
+
+    # rename the columns
+    def rename_columns(columns):
+        renamed_columns = []
+        for i in range(len(columns)):
+            if i < 55:
+                renamed_columns.append(f'Q{i + 1}')
+            elif i == 55:
+                renamed_columns.extend([f'Q56{chr(j)}' for j in range(97, 105)])  # Q56a to Q56h
+            else:
+                renamed_columns.append(f'Q{i + 1}') if i + 1 < (len(columns) - 6) else None
+        return renamed_columns
+
+    questionnaires.columns = rename_columns(cbcl_cols)
+
+    # remove designated columns
+    questionnaires = questionnaires.drop(columns=['Q2', 'Q59', 'Q67', 'Q73', 'Q96', 'Q99', 'Q101', 'Q105'])
+
+    # reconstruct designated columns
+    def reconstruct(col1, col2, new_col, df, round=True):
+        df[new_col] = (df[col1] + df[col2]) / 2
+        if round:
+            df[new_col] = df[new_col].round()
+        else:
+            df[new_col] = df[new_col]
+        df = df.drop(columns=[col1, col2])
+        return df
+
+    questionnaires = reconstruct('Q20', 'Q21', 'Destroy', questionnaires, round=False)
+    questionnaires = reconstruct('Q8', 'Q78', 'Inattentive', questionnaires)
+    questionnaires = reconstruct('Q53', 'Q55', 'Overweight', questionnaires)
+
+    uniform_vars = []
+    for col in questionnaires.columns:
+        if len(questionnaires[col].unique()) == 1:
+            questionnaires = questionnaires.drop(columns=[col])
+            uniform_vars.append(col)
+            print(f'Uniform questionnaire item dropped: {col}')
+
+
+else:
+    # remove all the total scores
+    questionnaires = questionnaires.drop(columns=questionnaires_totals['ElementName'])
+
+    # remove all the text columns
+    text_cols = questionnaires_dict[questionnaires_dict['ValueRange'].str.contains('Text', na=False)]['ElementName']
+    text_cols = text_cols.str.replace('^CBCL_', '', regex=True)  # to standardize the column names
+    questionnaires = questionnaires.drop(columns=text_cols)
+
+    # remove all the PSES columns
+    pses_cols = questionnaires[questionnaires.columns[questionnaires.columns.str.contains('PSES')]].columns
+    questionnaires = questionnaires.drop(columns=pses_cols)
+
+    # remove all the parent evaluated SCARED columns
+    scaredp_cols = questionnaires[questionnaires.columns[questionnaires.columns.str.contains('SCARED_P')]].columns
+    scaredc_cols = questionnaires[questionnaires.columns[questionnaires.columns.str.contains('SCARED_C')]].columns
+
+    # calculate the correlation between the parent and child SCARED columns
+    scared_corr = []
+    for i, j in zip(scaredp_cols, scaredc_cols):
+        corr = questionnaires[i].corr(questionnaires[j])
+        scared_corr.append((i, j, corr))
+
+    corr_mean = np.mean([corr[2] for corr in scared_corr])  # 0.35866433753391785
+
+    # remove the parent SCARED columns
+    questionnaires = questionnaires.drop(columns=scaredp_cols)
+
+    # reconstruct the appetite column
+    for index, row in questionnaires.iterrows():
+        if row['CDRSR_appetite_type'] == -777:
+            questionnaires.at[index, 'CDRSR_appetite'] = 0
+        elif row['CDRSR_appetite_type'] == 0:
+            questionnaires.at[index, 'CDRSR_appetite'] = 1 * (row['CDRSR_appetite'] - 1)
+        elif row['CDRSR_appetite_type'] == 1:
+            questionnaires.at[index, 'CDRSR_appetite'] = -1 * (row['CDRSR_appetite'] - 1)
+
+    questionnaires = questionnaires.drop(columns='CDRSR_appetite_type')
+
+    # check nan values
+    missing_qn = questionnaires.isna().sum().sort_values(ascending=False)
+    missing_qn_var = missing_qn[missing_qn > 0].index
+    if missing_qn_var.any():
+        for col in missing_qn_var:
+            print(f'{col} has {missing_qn[col]} missing values')
+    else:
+        print('No missing values in the questionnaires data')
+
+    # now, preprocess the data for the bifactor ESEM model
+    # remove the id columns
+    questionnaires = questionnaires.drop(columns=questionnaires.columns[:5])
+    questionnaires = questionnaires.drop(columns=questionnaires.columns[-6:])
+
+    # if over 99% of the data contains the same value, drop the column
+    uniform_vars = []
+    for col in questionnaires.columns:
+        if len(questionnaires[col].unique()) == 1:
+            questionnaires = questionnaires.drop(columns=[col])
+            uniform_vars.append(col)
+            print(f'Uniform questionnaire item dropped: {col}')
+
+    # check the correlation between the questionnaire items
+    corr = questionnaires.corr()
+
+    # find the variables that are highly correlated
+    high_corr = []
+    for i in range(corr.shape[0]):
+        for j in range(i + 1, corr.shape[0]):
+            if abs(corr.iloc[i, j]) > 0.85:
+                high_corr.append((corr.index[i], corr.columns[j]))
+
+    # print the highly correlated variables
+    if high_corr:
+        print('Highly correlated variables:')
+        for var in high_corr:
+            print(var)
+
+    # take the mean of the highly correlated variables and drop the original variables
+    for var in high_corr:
+        questionnaires[var[0]] = (questionnaires[var[0]] + questionnaires[var[1]]) / 2
+        questionnaires = questionnaires.drop(columns=[var[1]])
+
+    # check again
+    corr_checker = questionnaires.corr()
+    high_corr_checker = []
+    for i in range(corr_checker.shape[0]):
+        for j in range(i + 1, corr_checker.shape[0]):
+            if abs(corr_checker.iloc[i, j]) > 0.85:
+                high_corr_checker.append((corr_checker.index[i], corr_checker.columns[j]))
+
+    if high_corr_checker:
+        print('Highly correlated variables after dropping:')
+        for var in high_corr_checker:
+            print(var)
+
+    # finally, standardize the data
+    print(f'Current data range: {questionnaires.max().max()} - {questionnaires.min().min()}')
+    for col in questionnaires.columns:
+        # transform the data using min-max scaling
+        questionnaires[col] = (questionnaires[col] - questionnaires[col].min()) / (questionnaires[col].max() -
+                                                                                   questionnaires[col].min())
+    print(f'Standardized data range: {questionnaires.max().max()} - {questionnaires.min().min()}')
 
 if __name__ == '__main__':
     # save cleaned data
@@ -208,6 +374,9 @@ if __name__ == '__main__':
     neuro_mean_df.to_csv('./Data/PLS_Data/neuro_mean.csv', index=False)
     neuro_combined_df.to_csv('./Data/PLS_Data/neuro_combined.csv', index=False)
     iron.to_csv('./Data/PLS_Data/iron.csv', index=False)
+#
+    # save questionnaires data
+    questionnaires.to_csv('./Data/CBCL.csv', index=False)
 
 # =============================================================================
 #              SGT Data Cleaning (not necessary unless needed)
