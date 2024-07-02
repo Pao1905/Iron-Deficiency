@@ -17,6 +17,7 @@ sys.path.append(result_dir)
 
 # read original data
 data = pd.read_csv('./Data/cleaned_data.csv')
+CBCL_bi = pd.read_csv('./Data/PLS_Data/CBCL_bi.csv')
 
 print(pearsonr(data['Ferritin_ngperml'], data['Hemoccue_Hb']))
 print(pearsonr(data['PARS_AnxSymptCt'], data['l_Pu_mean']))
@@ -85,6 +86,9 @@ cognition_neuro_results = get_pls_results('PLS_Behav_cognition~neuro_lv_vals.mat
 cognition_psychopathology_results = get_pls_results('PLS_Behav_cognition~psychopathology_lv_vals.mat',
                                                         'PLS_Behav_cognition~psychopathology.mat',
                                                         psychopathology)
+cognition_CBCL_bi_results = get_pls_results('PLS_Behav_cognition~CBCL_bi_lv_vals.mat',
+                                             'PLS_Behav_cognition~CBCL_bi.mat',
+                                             CBCL_bi)
 
 # # pls from R
 # pls_result_path = './Data/PLS_Results/PLS_results_hsCRP.csv'
