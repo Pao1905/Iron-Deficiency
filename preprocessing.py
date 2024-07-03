@@ -25,7 +25,7 @@ with open('./Data/Original_Data/jatos_results_Pulled_4_10_24.txt', 'r') as file:
 
 SGT = pd.DataFrame(SGT)
 
-CBCL = True
+choice = "else"
 
 # =============================================================================
 #                               Data Cleaning
@@ -189,25 +189,63 @@ print('=' * 50)
 
 print('Preparing for bifactor model...')
 
-# only select participants that are in the data
-questionnaires = questionnaires[questionnaires['Code'].isin(data['Code'])]
 
-if CBCL:
-    # select only the CBCL columns
-    cbcl_cols = questionnaires.columns[questionnaires.columns.str.contains('Q')]
-    questionnaires = questionnaires[cbcl_cols]
-
-    # rename the columns
-    def rename_columns(columns):
-        renamed_columns = []
-        for i in range(len(columns)):
+# rename the columns
+def rename_columns(columns, cbcl_cols=True):
+    renamed_columns = []
+    for i in range(len(columns)):
+        if cbcl_cols:
             if i < 55:
                 renamed_columns.append(f'Q{i + 1}')
             elif i == 55:
                 renamed_columns.extend([f'Q56{chr(j)}' for j in range(97, 105)])  # Q56a to Q56h
             else:
                 renamed_columns.append(f'Q{i + 1}') if i + 1 < (len(columns) - 6) else None
-        return renamed_columns
+        else:
+            renamed_columns.append(f'Q{i + 1}')
+    return renamed_columns
+
+
+def high_corr_checker(df, cutoff=0.85, checker=False):
+    # check the correlation between the questionnaire items
+    corr = df.corr()
+
+    # find the variables that are highly correlated
+    high_corr = []
+    for i in range(corr.shape[0]):
+        for j in range(i + 1, corr.shape[0]):
+            if abs(corr.iloc[i, j]) > cutoff:
+                high_corr.append((corr.index[i], corr.columns[j]))
+
+    if checker:
+        if high_corr:
+            print('Highly correlated variables after processing:')
+            for var in high_corr_checker:
+                print(var)
+        else:
+            print('No more highly correlated variables after dropping')
+
+    else:
+        # print the highly correlated variables
+        if high_corr:
+            print('Highly correlated variables:')
+            for var in high_corr:
+                print(var)
+
+        # take the mean of the highly correlated variables and drop the original variables
+        for var in high_corr:
+            df[var[0]] = ((df[var[0]] + df[var[1]]) / 2).round()
+            df = df.drop(columns=[var[1]])
+
+    return df
+
+# only select participants that are in the data
+questionnaires = questionnaires[questionnaires['Code'].isin(data['Code'])]
+
+if choice == "CBCL":
+    # select only the CBCL columns
+    cbcl_cols = questionnaires.columns[questionnaires.columns.str.contains('Q')]
+    questionnaires = questionnaires[cbcl_cols]
 
     questionnaires.columns = rename_columns(cbcl_cols)
 
@@ -224,6 +262,7 @@ if CBCL:
         df = df.drop(columns=[col1, col2])
         return df
 
+
     questionnaires = reconstruct('Q20', 'Q21', 'Destroy', questionnaires, round=False)
     questionnaires = reconstruct('Q8', 'Q78', 'Inattentive', questionnaires)
     questionnaires = reconstruct('Q53', 'Q55', 'Overweight', questionnaires)
@@ -235,6 +274,40 @@ if CBCL:
             uniform_vars.append(col)
             print(f'Uniform questionnaire item dropped: {col}')
 
+        corr = questionnaires.corr()
+        high_corr = []
+        for i in range(corr.shape[0]):
+            for j in range(i + 1, corr.shape[0]):
+                if abs(corr.iloc[i, j]) > 0.85:
+                    high_corr.append((corr.index[i], corr.columns[j]))
+
+        # print the highly correlated variables
+        if high_corr:
+            print('Highly correlated variables:')
+            for var in high_corr:
+                print(f'{var[0]} and {var[1]} are highly correlated, with a correlation of {corr[var[0]][var[1]]}')
+
+elif choice == "Totals":
+    questionnaires = questionnaires[questionnaires_totals['ElementName']]
+    col_to_drop = questionnaires[questionnaires.columns[(questionnaires.columns.str.contains('T_SCORE') |
+                                                         questionnaires.columns.str.contains('total') |
+                                                         questionnaires.columns.str.contains('Total') |
+                                                         questionnaires.columns.str.contains('CESD_C_Score') |
+                                                         questionnaires.columns.str.contains('_pct'))]].columns
+    questionnaires = questionnaires.drop(columns=col_to_drop)
+    print(questionnaires.columns)
+
+    # check for correlation between the total scores
+    questionnaires = high_corr_checker(questionnaires)
+    corr = questionnaires.corr()
+
+    # standardize the data
+    print(f'Current data range: {questionnaires.max().max()} - {questionnaires.min().min()}')
+    for col in questionnaires.columns:
+        # transform the data using min-max scaling
+        questionnaires[col] = (questionnaires[col] - questionnaires[col].min()) / (questionnaires[col].max() -
+                                                                                   questionnaires[col].min())
+    print(f'Standardized data range: {questionnaires.max().max()} - {questionnaires.min().min()}')
 
 else:
     # remove all the total scores
@@ -289,6 +362,9 @@ else:
     questionnaires = questionnaires.drop(columns=questionnaires.columns[:5])
     questionnaires = questionnaires.drop(columns=questionnaires.columns[-6:])
 
+    # cbcl_cols = questionnaires.columns[questionnaires.columns.str.contains('Q')]
+    # questionnaires = questionnaires[cbcl_cols]
+
     # if over 99% of the data contains the same value, drop the column
     uniform_vars = []
     for col in questionnaires.columns:
@@ -298,85 +374,66 @@ else:
             print(f'Uniform questionnaire item dropped: {col}')
 
     # check the correlation between the questionnaire items
-    corr = questionnaires.corr()
-
-    # find the variables that are highly correlated
-    high_corr = []
-    for i in range(corr.shape[0]):
-        for j in range(i + 1, corr.shape[0]):
-            if abs(corr.iloc[i, j]) > 0.85:
-                high_corr.append((corr.index[i], corr.columns[j]))
-
-    # print the highly correlated variables
-    if high_corr:
-        print('Highly correlated variables:')
-        for var in high_corr:
-            print(var)
-
-    # take the mean of the highly correlated variables and drop the original variables
-    for var in high_corr:
-        questionnaires[var[0]] = (questionnaires[var[0]] + questionnaires[var[1]]) / 2
-        questionnaires = questionnaires.drop(columns=[var[1]])
+    questionnaires = high_corr_checker(questionnaires)
 
     # check again
-    corr_checker = questionnaires.corr()
-    high_corr_checker = []
-    for i in range(corr_checker.shape[0]):
-        for j in range(i + 1, corr_checker.shape[0]):
-            if abs(corr_checker.iloc[i, j]) > 0.85:
-                high_corr_checker.append((corr_checker.index[i], corr_checker.columns[j]))
+    high_corr_checker(questionnaires, checker=True)
 
-    if high_corr_checker:
-        print('Highly correlated variables after dropping:')
-        for var in high_corr_checker:
-            print(var)
+    # # finally, standardize the data
+    # print(f'Current data range: {questionnaires.max().max()} - {questionnaires.min().min()}')
+    # for col in questionnaires.columns:
+    #     # transform the data using min-max scaling
+    #     questionnaires[col] = (questionnaires[col] - questionnaires[col].min()) / (questionnaires[col].max() -
+    #                                                                                questionnaires[col].min())
+    # print(f'Standardized data range: {questionnaires.max().max()} - {questionnaires.min().min()}')
 
-    # finally, standardize the data
-    print(f'Current data range: {questionnaires.max().max()} - {questionnaires.min().min()}')
-    for col in questionnaires.columns:
-        # transform the data using min-max scaling
-        questionnaires[col] = (questionnaires[col] - questionnaires[col].min()) / (questionnaires[col].max() -
-                                                                                   questionnaires[col].min())
-    print(f'Standardized data range: {questionnaires.max().max()} - {questionnaires.min().min()}')
+    # # rename the columns
+    # questionnaires.columns = rename_columns(questionnaires.columns, cbcl_cols=False)
 
-if __name__ == '__main__':
-    # save cleaned data
-    data.to_csv('./Data/cleaned_data.csv', index=False)
+    # print the column name according to column index
+    for i, col in enumerate(questionnaires.columns):
+        print(f'{i + 1}: {col}')
 
-    # save task PLS data
-    psych_without_neuro.to_csv('./Data/PLS_Data/psych_without_neuro.csv', index=False)
-    control_without_neuro.to_csv('./Data/PLS_Data/control_without_neuro.csv', index=False)
-
-    psych_behav.to_csv('./Data/PLS_Data/psych_behav.csv', index=False)
-    control_behav.to_csv('./Data/PLS_Data/control_behav.csv', index=False)
-
-    psych_mean.to_csv('./Data/PLS_Data/psych_mean.csv', index=False)
-    control_mean.to_csv('./Data/PLS_Data/control_mean.csv', index=False)
-
-    psych_median.to_csv('./Data/PLS_Data/psych_median.csv', index=False)
-    control_median.to_csv('./Data/PLS_Data/control_median.csv', index=False)
-
-    psych_combined.to_csv('./Data/PLS_Data/psych_combined.csv', index=False)
-    control_combined.to_csv('./Data/PLS_Data/control_combined.csv', index=False)
-
-    psych_with_mean.to_csv('./Data/PLS_Data/psych_with_mean.csv', index=False)
-    control_with_mean.to_csv('./Data/PLS_Data/control_with_mean.csv', index=False)
-
-    psych_with_median.to_csv('./Data/PLS_Data/psych_with_median.csv', index=False)
-    control_with_median.to_csv('./Data/PLS_Data/control_with_median.csv', index=False)
-
-    psych_with_combined.to_csv('./Data/PLS_Data/psych_with_combined.csv', index=False)
-    control_with_combined.to_csv('./Data/PLS_Data/control_with_combined.csv', index=False)
-
-    # save behavioral PLS data
-    psychopathology.to_csv('./Data/PLS_Data/psychopathology.csv', index=False)
-    behavioral.to_csv('./Data/PLS_Data/behavioral.csv', index=False)
-    neuro_mean_df.to_csv('./Data/PLS_Data/neuro_mean.csv', index=False)
-    neuro_combined_df.to_csv('./Data/PLS_Data/neuro_combined.csv', index=False)
-    iron.to_csv('./Data/PLS_Data/iron.csv', index=False)
+# if __name__ == '__main__':
+#     # save cleaned data
+#     data.to_csv('./Data/cleaned_data.csv', index=False)
 #
-    # save questionnaires data
-    questionnaires.to_csv('./Data/CBCL.csv', index=False)
+#     # save task PLS data
+#     psych_without_neuro.to_csv('./Data/PLS_Data/psych_without_neuro.csv', index=False)
+#     control_without_neuro.to_csv('./Data/PLS_Data/control_without_neuro.csv', index=False)
+#
+#     psych_behav.to_csv('./Data/PLS_Data/psych_behav.csv', index=False)
+#     control_behav.to_csv('./Data/PLS_Data/control_behav.csv', index=False)
+#
+#     psych_mean.to_csv('./Data/PLS_Data/psych_mean.csv', index=False)
+#     control_mean.to_csv('./Data/PLS_Data/control_mean.csv', index=False)
+#
+#     psych_median.to_csv('./Data/PLS_Data/psych_median.csv', index=False)
+#     control_median.to_csv('./Data/PLS_Data/control_median.csv', index=False)
+#
+#     psych_combined.to_csv('./Data/PLS_Data/psych_combined.csv', index=False)
+#     control_combined.to_csv('./Data/PLS_Data/control_combined.csv', index=False)
+#
+#     psych_with_mean.to_csv('./Data/PLS_Data/psych_with_mean.csv', index=False)
+#     control_with_mean.to_csv('./Data/PLS_Data/control_with_mean.csv', index=False)
+#
+#     psych_with_median.to_csv('./Data/PLS_Data/psych_with_median.csv', index=False)
+#     control_with_median.to_csv('./Data/PLS_Data/control_with_median.csv', index=False)
+#
+#     psych_with_combined.to_csv('./Data/PLS_Data/psych_with_combined.csv', index=False)
+#     control_with_combined.to_csv('./Data/PLS_Data/control_with_combined.csv', index=False)
+#
+#     # save behavioral PLS data
+#     psychopathology.to_csv('./Data/PLS_Data/psychopathology.csv', index=False)
+#     behavioral.to_csv('./Data/PLS_Data/behavioral.csv', index=False)
+#     neuro_mean_df.to_csv('./Data/PLS_Data/neuro_mean.csv', index=False)
+#     neuro_combined_df.to_csv('./Data/PLS_Data/neuro_combined.csv', index=False)
+#     iron.to_csv('./Data/PLS_Data/iron.csv', index=False)
+# #
+#     # save questionnaires data
+#     questionnaires.to_csv('./Data/CBCL_customized.csv', index=False)
+#     questionnaires.to_csv('./Data/Totals.csv', index=False)
+
 
 # =============================================================================
 #              SGT Data Cleaning (not necessary unless needed)
